@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SG Billy | Node Workflow Interface</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400;600;700&family=Inter:wght@300;400;500;700&family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        /* === CORE VARIABLES & SETUP === */
+        :root {
+            --bg-base: #030303;
+            --bg-surface: #0a0a0a;
+            --text-main: #f5f5f7;
+            --text-muted: #86868b;
+            --accent-red-light: #ff3333;
+            --accent-red-dark: #8a0000;
+            --node-bg: rgba(10, 10, 10, 0.85);
+            --node-border: rgba(255, 255, 255, 0.15);
+            --wire-color: rgba(255, 255, 255, 0.1);
+            --wire-active: rgba(255, 51, 51, 0.6);
+        }
+
+        body {
+            background-color: var(--bg-base);
+            /* Global Workspace Dot Grid */
+            background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 30px 30px;
+            background-position: 0 0;
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            cursor: none;
+            margin: 0;
+            overscroll-behavior: none;
+        }
+
+        h1, h2, h3, h4, .font-display { font-family: 'Montserrat', sans-serif; text-transform: uppercase; letter-spacing: 0.15em; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* === CUSTOM CROSSHAIR CURSOR === */
+        .cursor-cross {
+            position: fixed; top: 0; left: 0; transform: translate(-50%, -50%);
+            width: 20px; height: 20px; z-index: 9999; pointer-events: none;
+        }
+        .cursor-cross::before, .cursor-cross::after {
+            content: ''; position: absolute; background: var(--accent-red-light);
+            box-shadow: 0 0 5px var(--accent-red-light);
+        }
+        .cursor-cross::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        .cursor-cross::after { top: 0; left: 9px; width: 2px; height: 20px; }
+        
+        .cursor-outline {
+            position: fixed; top: 0; left: 0; transform: translate(-50%, -50%);
+            border-radius: 50%; z-index: 9998; pointer-events: none;
+            width: 40px; height: 40px; border: 1px dashed rgba(255, 51, 51, 0.4);
+            transition: width 0.2s, height 0.2s, background-color 0.2s, border-color 0.2s;
+            animation: rotateCursor 10s linear infinite;
+        }
+        @keyframes rotateCursor { 100% { transform: translate(-50%, -50%) rotate(360deg); } }
+        .cursor-hover .cursor-outline {
+            width: 60px; height: 60px; background-color: rgba(255, 51, 51, 0.05);
+            border-style: solid; border-color: rgba(255, 51, 51, 0.8); backdrop-filter: blur(2px);
+        }
+
+        /* === SCROLLBAR === */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-base); border-left: 1px solid rgba(255,255,255,0.05); }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 0; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-red-light); }
+
+        /* === ENTRY SCREEN === */
+        #entry-screen {
+            position: fixed; inset: 0; background: var(--bg-base); z-index: 9000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 30px 30px; transition: opacity 1.5s, visibility 1.5s;
+        }
+
+        /* === NODE WORKFLOW ARCHITECTURE === */
+        .node-card {
+            background: var(--node-bg);
+            border: 1px solid var(--node-border);
+            border-radius: 4px;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.02);
+            position: relative;
+            transition: all 0.4s ease;
+        }
+        .node-card:hover {
+            border-color: rgba(255, 51, 51, 0.5);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8), 0 0 30px rgba(255,51,51,0.1);
+            transform: translateY(-2px);
+            z-index: 50;
+        }
+        .node-header {
+            background: rgba(0, 0, 0, 0.8);
+            border-bottom: 1px solid var(--node-border);
+            padding: 8px 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-top-left-radius: 3px; border-top-right-radius: 3px;
+        }
+        
+        /* Node Ports (Inputs/Outputs) */
+        .node-port {
+            position: absolute; width: 10px; height: 10px; background: #000;
+            border: 2px solid #555; border-radius: 50%; z-index: 20; transition: all 0.3s ease;
+        }
+        .node-card:hover .node-port { border-color: var(--accent-red-light); background: var(--accent-red-light); box-shadow: 0 0 10px var(--accent-red-light); }
+        
+        .port-top { top: -5px; left: 50%; transform: translateX(-50%); }
+        .port-bottom { bottom: -5px; left: 50%; transform: translateX(-50%); }
+        .port-left { left: -5px; top: 50%; transform: translateY(-50%); }
+        .port-right { right: -5px; top: 50%; transform: translateY(-50%); }
+
+        /* Workflow Wires & Data Flow */
+        .net-wire { position: absolute; background: var(--wire-color); z-index: 0; transition: all 0.4s ease; }
+        .node-card:hover ~ .net-wire, .node-card:hover > .net-wire, .group:hover .net-wire {
+            background: var(--wire-active); box-shadow: 0 0 10px var(--wire-active);
+        }
+        
+        .wire-v { width: 2px; }
+        .wire-h { height: 2px; }
+        
+        .data-packet { position: absolute; background: #fff; box-shadow: 0 0 8px #fff, 0 0 15px #ff3333; border-radius: 50%; opacity: 0; }
+        .packet-v { width: 4px; height: 15px; left: -1px; animation: flow-v 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        .packet-h { height: 4px; width: 15px; top: -1px; animation: flow-h 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        .packet-h-rev { height: 4px; width: 15px; top: -1px; animation: flow-h-rev 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        
+        @keyframes flow-v { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+        @keyframes flow-h { 0% { left: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
+        @keyframes flow-h-rev { 0% { right: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { right: 100%; opacity: 0; } }
+
+        /* Central Workflow Spine */
+        .master-spine {
+            position: absolute; left: 50%; top: 0; bottom: 0; width: 2px;
+            background: rgba(255, 255, 255, 0.05); transform: translateX(-50%); z-index: 0;
+        }
+
+        /* === MISC ELEMENTS === */
+        #coord-tracker {
+            position: fixed; bottom: 20px; right: 20px; z-index: 100;
+            background: rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.2);
+            padding: 8px 12px; border-radius: 2px; pointer-events: none;
+        }
+
+        /* Hero Glitch FX */
+        .hero-title-cyber {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(3.5rem, 10vw, 8rem); font-weight: 900; line-height: 1.1; letter-spacing: 0.05em;
+            color: transparent; -webkit-text-stroke: 1px rgba(255, 255, 255, 0.15);
+            position: relative; display: inline-block; text-transform: uppercase;
+        }
+        .hero-title-cyber::before {
+            content: attr(data-text); position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+            color: #fff; -webkit-text-stroke: 0px transparent;
+            background: linear-gradient(135deg, #ffffff, #ff3333, #8a0000);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            clip-path: circle(0px at var(--x, 50%) var(--y, 50%));
+            pointer-events: none; filter: drop-shadow(0 0 20px rgba(255, 51, 51, 0.8)); z-index: 2;
+        }
+        .hero-title-wrap:hover .hero-title-cyber::before { clip-path: circle(70px at var(--x) var(--y)); }
+
+        .reveal { opacity: 0; transform: translateY(20px); transition: all 1s cubic-bezier(0.16, 1, 0.3, 1); }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+        .delay-200 { transition-delay: 200ms; }
+
+        .stat-bar-fill {
+            height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-red-dark), var(--accent-red-light));
+            box-shadow: 0 0 10px var(--accent-red-light); transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        /* Background Canvases */
+        canvas { position: absolute; inset: 0; pointer-events: none; }
+        .cyber-grid {
+            position: absolute; inset: 0; z-index: -1; opacity: 0.4;
+            background-image: linear-gradient(rgba(255, 51, 51, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 51, 51, 0.1) 1px, transparent 1px);
+            background-size: 60px 60px; background-position: center bottom;
+            transform: perspective(600px) rotateX(60deg) translateY(-100px) translateZ(-250px);
+            animation: gridMove 15s linear infinite;
+        }
+        @keyframes gridMove { 100% { transform: perspective(600px) rotateX(60deg) translateY(60px) translateZ(-250px); } }
+    </style>
+</head>
+<body class="interactive-area">
+
+    <!-- CUSTOM CURSOR -->
+    <div class="cursor-cross"></div>
+    <div class="cursor-outline"></div>
+
+    <!-- UI COORDINATE TRACKER -->
+    <div id="coord-tracker" class="font-mono text-[10px] text-[#ff3333] flex gap-3 backdrop-blur-md">
+        <span>X: <span id="track-x" class="text-white">000</span></span>
+        <span>Y: <span id="track-y" class="text-white">000</span></span>
+        <span class="text-gray-600">|</span>
+        <span class="text-gray-400">NODE_WKFLW_ACTIVE</span>
+    </div>
+
+    <!-- ENTRY SCREEN -->
+    <div id="entry-screen">
+        <div class="node-card p-1 max-w-sm w-full mx-4">
+            <div class="node-header">
+                <span class="font-mono text-[10px] text-[#ff3333]">SYS_INIT.EXE</span>
+                <div class="flex gap-1"><div class="w-2 h-2 bg-[#ff3333] rounded-full animate-pulse"></div></div>
+            </div>
+            <div class="p-8 flex flex-col items-center bg-[#050505]">
+                <h2 class="text-xs tracking-[0.4em] mb-8 text-gray-400 font-display text-center">NETWORK READY</h2>
+                <button id="enter-btn" class="border border-[#ff3333]/40 text-white font-mono text-xs px-8 py-3 hover:bg-[#ff3333]/10 hover:border-[#ff3333] transition-all tracking-widest interactive-elem">CONNECT NODES</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN WRAPPER -->
+    <div id="main-content" style="display: none;">
+        
+        <!-- 01: HERO WORKSPACE -->
+        <section class="relative min-h-screen flex flex-col justify-center items-center px-6 border-b border-white/5" id="hero-section">
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,#150505_0%,transparent_70%)] z-[-1]"></div>
+            <div class="cyber-grid"></div>
+            <canvas id="hero-network-canvas" class="z-0 opacity-80 mix-blend-screen"></canvas>
+            
+            <!-- Output Spine dropping down from Hero -->
+            <div class="master-spine top-1/2 mt-32 z-0 hidden md:block">
+                <div class="data-packet packet-v"></div>
+            </div>
+
+            <!-- Left Interactive Nodes -->
+            <div class="absolute left-6 lg:left-12 top-1/2 -translate-y-1/2 hidden xl:flex flex-col gap-6 z-20">
+                <!-- Node 1 -->
+                <div class="node-card w-64 group interactive-elem">
+                    <div class="node-header">
+                        <span class="font-mono text-[9px] text-gray-400">NODE // SYS.MONITOR</span>
+                        <i class="fa-solid fa-chart-line text-[10px] text-gray-500"></i>
+                    </div>
+                    <div class="p-4 bg-black/60">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="w-1.5 h-1.5 bg-[#ff3333] rounded-full animate-ping"></span> 
+                            <span class="text-[10px] font-mono text-[#ff3333] tracking-widest">AURAL ENGINE</span>
+                        </div>
+                        <div class="flex items-end gap-1.5 h-6 opacity-70">
+                            <div class="w-full bg-[#ff3333] rounded-t-sm animate-[eq_0.5s_ease-in-out_infinite_alternate]" style="height: 40%"></div>
+                            <div class="w-full bg-[#ff3333] rounded-t-sm animate-[eq_0.8s_ease-in-out_infinite_alternate]" style="height: 80%"></div>
+                            <div class="w-full bg-[#ff3333] rounded-t-sm animate-[eq_0.6s_ease-in-out_infinite_alternate]" style="height: 60%"></div>
+                            <div class="w-full bg-[#ff3333] rounded-t-sm animate-[eq_1.0s_ease-in-out_infinite_alternate]" style="height: 100%"></div>
+                        </div>
+                    </div>
+                    <!-- Node output port & wire -->
+                    <div class="node-port port-right"></div>
+                    <div class="net-wire wire-h w-16 -right-16 top-1/2"><div class="data-packet packet-h"></div></div>
+                </div>
+                
+                <!-- Node 2 -->
+                <div class="node-card w-64 group interactive-elem">
+                    <div class="node-header">
+                        <span class="font-mono text-[9px] text-gray-400">NODE // NET.PING</span>
+                        <i class="fa-solid fa-globe text-[10px] text-gray-500"></i>
+                    </div>
+                    <div class="p-4 bg-black/60 flex justify-between items-end">
+                        <div class="text-3xl font-display text-white leading-none">14<span class="text-xs text-gray-500 ml-1">ms</span></div>
+                        <span class="text-[9px] font-mono text-[#ff3333] uppercase">Optimal</span>
+                    </div>
+                    <!-- Node output port & wire -->
+                    <div class="node-port port-right"></div>
+                    <div class="net-wire wire-h w-24 -right-24 top-1/2"><div class="data-packet packet-h" style="animation-delay: 0.5s;"></div></div>
+                </div>
+            </div>
+
+            <!-- Right Interactive Nodes -->
+            <div class="absolute right-6 lg:right-12 top-1/2 -translate-y-1/2 hidden xl:flex flex-col gap-6 z-20">
+                <!-- Node 3 -->
+                <a href="#popular-section" class="block node-card w-64 group interactive-elem cursor-none">
+                    <div class="node-port port-left"></div>
+                    <div class="net-wire wire-h w-16 -left-16 top-1/2"><div class="data-packet packet-h-rev"></div></div>
+                    
+                    <div class="node-header">
+                        <span class="font-mono text-[9px] text-gray-400">NODE // QUICK_ACCESS</span>
+                        <i class="fa-solid fa-arrow-right -rotate-45 text-[10px] text-gray-500 group-hover:text-[#ff3333]"></i>
+                    </div>
+                    <div class="p-4 bg-black/60">
+                        <span class="text-sm font-display text-white group-hover:text-[#ff3333] transition-colors">POPULAR HITS</span>
+                    </div>
+                </a>
+                
+                <!-- Node 4 (AI Lab Launcher) -->
+                <button id="open-ai-lab" class="block node-card w-64 group interactive-elem cursor-none text-left">
+                    <div class="node-port port-left"></div>
+                    <div class="net-wire wire-h w-24 -left-24 top-1/2"><div class="data-packet packet-h-rev" style="animation-delay: 0.7s;"></div></div>
+                    
+                    <div class="node-header">
+                        <span class="font-mono text-[9px] text-[#ff3333]">NODE // EXPERIMENTAL</span>
+                        <i class="fa-solid fa-microchip text-[10px] text-gray-500 group-hover:text-[#ff3333]"></i>
+                    </div>
+                    <div class="p-4 bg-black/60 relative overflow-hidden">
+                        <span class="text-sm font-display text-white group-hover:text-[#ff3333] transition-colors relative z-10">NEXUS A.I.</span>
+                        <div class="absolute inset-0 bg-[#ff3333]/10 w-0 group-hover:w-full transition-all duration-500 z-0"></div>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Central Hero Output -->
+            <div class="z-10 text-center flex flex-col items-center relative">
+                <div class="border border-[#ff3333]/30 bg-[#ff3333]/5 px-4 py-1 mb-8 font-mono text-[10px] text-[#ff3333] tracking-widest relative">
+                    <div class="absolute -top-1 -left-1 w-2 h-2 border-t border-l border-[#ff3333]"></div>
+                    <div class="absolute -bottom-1 -right-1 w-2 h-2 border-b border-r border-[#ff3333]"></div>
+                    PROCESS_ID: SONIC_ARCHITECT
+                </div>
+                
+                <div class="hero-title-wrap interactive-elem">
+                    <h1 class="hero-title-cyber" data-text="SG BILLY">SG BILLY</h1>
+                </div>
+                
+                <h2 class="text-xs md:text-sm tracking-[0.6em] text-gray-400 font-display decode-text mt-4 bg-black/50 px-4 py-2 border border-white/10" data-value="Breaking the Sound Barrier">Breaking the Sound Barrier</h2>
+                
+                <!-- Node Port sending data down -->
+                <div class="node-port -bottom-12 left-1/2 -translate-x-1/2 shadow-[0_0_15px_#ff3333]"></div>
+                
+                <!-- Interactive Audio Engine Toggle inside Central flow -->
+                <div id="audio-toggle" class="mt-20 flex items-center gap-4 interactive-elem p-3 rounded-sm border border-white/10 bg-black/80 backdrop-blur-md transition-all hover:border-[#ff3333]/50 cursor-none z-50 group">
+                    <div class="node-port port-top"></div>
+                    <div class="flex items-end h-3 gap-1" id="eq-container">
+                        <div class="eq-bar w-1 animate-[eq_0.8s_ease-in-out_infinite_alternate]"></div>
+                        <div class="eq-bar w-1 animate-[eq_1.2s_ease-in-out_infinite_alternate_0.2s]"></div>
+                        <div class="eq-bar w-1 animate-[eq_0.9s_ease-in-out_infinite_alternate_0.4s]"></div>
+                    </div>
+                    <span class="text-[9px] font-mono tracking-widest text-gray-300 uppercase" id="audio-status-text">Network: On</span>
+                    <div class="node-port port-bottom"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 02: ARTIST IDENTITY NODE -->
+        <section class="py-32 px-6 relative z-10 border-b border-white/5">
+            <div class="max-w-5xl mx-auto relative">
+                <!-- Master Vertical Spine -->
+                <div class="master-spine">
+                    <div class="data-packet packet-v"></div>
+                    <div class="data-packet packet-v" style="animation-delay: 1.5s;"></div>
+                </div>
+
+                <div class="node-card w-full group interactive-elem reveal">
+                    <div class="node-port port-top shadow-[0_0_10px_#ff3333]"></div>
+                    <div class="node-port port-bottom shadow-[0_0_10px_#ff3333]"></div>
+                    
+                    <div class="node-header border-b border-[#ff3333]/20 bg-[#ff3333]/5">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-fingerprint text-[#ff3333]"></i>
+                            <span class="font-mono text-[10px] text-gray-300 tracking-widest">NODE_01 // IDENTITY.DAT</span>
+                        </div>
+                        <span class="font-mono text-[10px] text-gray-500">STS: ONLINE</span>
+                    </div>
+
+                    <div class="p-8 md:p-12 bg-black/80 relative overflow-hidden">
+                        <div class="absolute -top-32 -right-32 w-64 h-64 bg-[#ff3333] rounded-full blur-[120px] opacity-10 group-hover:opacity-20 transition-all duration-700"></div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center relative z-10">
+                            <div>
+                                <h3 class="text-3xl md:text-5xl font-display font-bold text-white mb-6">SG <span class="text-transparent" style="-webkit-text-stroke: 1px rgba(255,255,255,0.6);">BILLY</span></h3>
+                                <p class="text-sm leading-relaxed text-gray-400 mb-6 font-mono">
+                                    > Visionary artist and sonic architect.<br>
+                                    > Dedicated to pushing boundaries of modern music.<br>
+                                    > Blending raw lyricism with high-energy rhythms.
+                                </p>
+                                <p class="text-sm leading-relaxed text-gray-400 font-mono">
+                                    > Delivering premium auditory and visual experiences to a dedicated global fanbase.
+                                </p>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="border border-white/10 bg-white/5 p-4 flex flex-col items-center text-center group-hover:border-[#ff3333]/40 transition-colors">
+                                    <span class="text-xl font-display font-bold text-white mb-1">500K+</span>
+                                    <span class="text-[9px] font-mono text-gray-500 uppercase">Monthly Streams</span>
+                                </div>
+                                <div class="border border-white/10 bg-white/5 p-4 flex flex-col items-center text-center group-hover:border-[#ff3333]/40 transition-colors">
+                                    <span class="text-xl font-display font-bold text-white mb-1">10M+</span>
+                                    <span class="text-[9px] font-mono text-gray-500 uppercase">Global Views</span>
+                                </div>
+                                <div class="border border-white/10 bg-white/5 p-4 flex flex-col items-center text-center group-hover:border-[#ff3333]/40 transition-colors">
+                                    <span class="text-xl font-display font-bold text-white mb-1">5+</span>
+                                    <span class="text-[9px] font-mono text-gray-500 uppercase">Digital Nodes</span>
+                                </div>
+                                <div class="border border-white/10 bg-white/5 p-4 flex flex-col items-center text-center group-hover:border-[#ff3333]/40 transition-colors">
+                                    <span class="text-xl font-display font-bold text-white mb-1">2024</span>
+                                    <span class="text-[9px] font-mono text-gray-500 uppercase">Era Defined</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 03: AI METRICS & DATA GRAPH -->
+        <section class="py-32 px-6 relative z-10 bg-[#050202] border-b border-white/5 overflow-hidden">
+            <canvas id="ai-canvas" class="z-0 opacity-40"></canvas>
+            
+            <div class="max-w-7xl mx-auto relative z-10">
+                <!-- Master Vertical Spine -->
+                <div class="master-spine">
+                    <div class="data-packet packet-v"></div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
+                    
+                    <!-- Node 02A: Terminal -->
+                    <div class="node-card group interactive-elem reveal relative">
+                        <!-- Responsive Port & Wire: Top on Mobile, Right on Desktop -->
+                        <div class="node-port -top-1.5 left-1/2 -translate-x-1/2 md:top-1/2 md:-right-1.5 md:-translate-y-1/2 md:left-auto md:translate-x-0"></div>
+                        <div class="net-wire wire-h w-8 -right-8 top-1/2 hidden md:block"><div class="data-packet packet-h"></div></div>
+                        
+                        <div class="node-header">
+                            <span class="font-mono text-[10px] text-[#ff3333]">NODE_02A // TERMINAL</span>
+                            <div class="w-2 h-2 bg-[#ff3333] rounded-full animate-pulse"></div>
+                        </div>
+                        <div class="p-6 bg-black/90 min-h-[200px]">
+                            <div class="font-mono text-xs text-gray-300 leading-loose" id="ai-typewriter"></div>
+                        </div>
+                    </div>
+
+                    <!-- Node 02B: Metrics -->
+                    <div class="node-card group interactive-elem reveal delay-200 relative" id="stats-container">
+                        <!-- Responsive Port & Wire: Bottom on Mobile, Left on Desktop -->
+                        <div class="node-port -bottom-1.5 left-1/2 -translate-x-1/2 md:top-1/2 md:-left-1.5 md:-translate-y-1/2 md:right-auto md:translate-x-0"></div>
+                        <div class="net-wire wire-h w-8 -left-8 top-1/2 hidden md:block"><div class="data-packet packet-h-rev"></div></div>
+                        
+                        <div class="node-header">
+                            <span class="font-mono text-[10px] text-gray-400">NODE_02B // EMPIRE_METRICS</span>
+                            <i class="fa-solid fa-chart-bar text-[#ff3333]"></i>
+                        </div>
+                        <div class="p-8 bg-black/90">
+                            <div class="stat-row">
+                                <div class="stat-label font-mono"><span>Sonic_Velocity</span><span class="text-[#ff3333]">98%</span></div>
+                                <div class="stat-bar-bg"><div class="stat-bar-fill" data-width="98%"></div></div>
+                            </div>
+                            <div class="stat-row">
+                                <div class="stat-label font-mono"><span>Visual_Quality</span><span class="text-[#ff3333]">100%</span></div>
+                                <div class="stat-bar-bg"><div class="stat-bar-fill" data-width="100%" style="transition-delay: 0.1s"></div></div>
+                            </div>
+                            <div class="stat-row">
+                                <div class="stat-label font-mono"><span>Audience_Retention</span><span class="text-[#ff3333]">94%</span></div>
+                                <div class="stat-bar-bg"><div class="stat-bar-fill" data-width="94%" style="transition-delay: 0.2s"></div></div>
+                            </div>
+                            <div class="stat-row">
+                                <div class="stat-label font-mono"><span>Algo_Growth</span><span class="text-[#ff3333]">97%</span></div>
+                                <div class="stat-bar-bg"><div class="stat-bar-fill" data-width="97%" style="transition-delay: 0.3s"></div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- 04: MOST RECENT WORK -->
+        <section class="py-32 px-6 relative z-10 border-b border-white/5">
+            <div class="max-w-5xl mx-auto relative z-10">
+                <div class="master-spine z-[-1]"><div class="data-packet packet-v"></div></div>
+                
+                <div class="node-card w-full group interactive-elem reveal">
+                    <div class="node-port port-top"></div>
+                    <div class="node-port port-bottom"></div>
+                    
+                    <div class="node-header bg-black">
+                        <span class="font-mono text-[10px] text-[#ff3333]">NODE_03 // RECENT_TRANSMISSION.MP4</span>
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono text-[9px] text-gray-500">REC.ID: 1LCm4PuzLcw</span>
+                            <i class="fa-solid fa-video text-gray-500"></i>
+                        </div>
+                    </div>
+
+                    <a href="https://youtu.be/1LCm4PuzLcw?si=2lWtARsIOT4JKmom" target="_blank" class="block relative aspect-video bg-black overflow-hidden p-1">
+                        <div class="scanline-overlay"></div>
+                        <div class="scanner-beam"></div>
+                        
+                        <img src="https://img.youtube.com/vi/1LCm4PuzLcw/maxresdefault.jpg" onerror="this.onerror=null;this.src='https://img.youtube.com/vi/1LCm4PuzLcw/hqdefault.jpg';" alt="Recent Work" class="w-full h-full object-cover opacity-70 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700 ease-out border border-white/5">
+                        
+                        <!-- Center Play Button -->
+                        <div class="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                            <div class="w-16 h-12 border border-[#ff3333] bg-black/60 backdrop-blur-sm flex items-center justify-center group-hover:bg-[#ff3333]/20 transition-all shadow-[0_0_20px_rgba(255,51,51,0.2)]">
+                                <i class="fa-solid fa-play text-lg text-[#ff3333] group-hover:text-white transition-colors ml-1"></i>
+                            </div>
+                        </div>
+                        
+                        <!-- HUD Elements overlay -->
+                        <div class="absolute bottom-4 left-4 font-mono text-[10px] bg-black/80 px-2 py-1 text-[#ff3333] border border-[#ff3333]/30 z-20">
+                            > PLAY_MEDIA
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 05: POPULAR WORK -->
+        <section id="popular-section" class="py-32 px-6 relative z-10 border-b border-white/5 bg-[#020101]">
+            <canvas id="neuron-canvas" class="absolute inset-0 w-full h-full z-0 opacity-60"></canvas>
+
+            <div class="max-w-5xl mx-auto relative z-10">
+                <div class="master-spine z-[-1]"><div class="data-packet packet-v"></div></div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 reveal delay-200">
+                    
+                    <!-- Video Node A -->
+                    <div class="node-card group interactive-elem relative">
+                        <div class="node-port -top-1.5 left-1/2 -translate-x-1/2 md:top-1/2 md:-right-1.5 md:-translate-y-1/2 md:left-auto md:translate-x-0"></div>
+                        <div class="net-wire wire-h w-4 -right-4 top-1/2 hidden md:block"><div class="data-packet packet-h"></div></div>
+                        
+                        <div class="node-header">
+                            <span class="font-mono text-[9px] text-gray-400">NODE_04A // ARCHIVE_01.MP4</span>
+                            <i class="fa-solid fa-link text-[#ff3333]"></i>
+                        </div>
+                        <a href="https://youtu.be/avswN6yLOdo?si=KxhRD9E1ZR6Kez_n" target="_blank" class="block aspect-video relative overflow-hidden bg-black p-1">
+                            <div class="scanline-overlay"></div>
+                            <img src="https://img.youtube.com/vi/avswN6yLOdo/maxresdefault.jpg" onerror="this.onerror=null;this.src='https://img.youtube.com/vi/avswN6yLOdo/hqdefault.jpg';" alt="Popular Project" class="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-all border border-white/5">
+                            <div class="absolute inset-0 flex items-center justify-center z-20">
+                                <i class="fa-solid fa-circle-play text-[#ff3333] text-3xl bg-black/50 rounded-full group-hover:shadow-[0_0_15px_#ff3333]"></i>
+                            </div>
+                        </a>
+                    </div>
+
+                    <!-- Video Node B -->
+                    <div class="node-card group interactive-elem relative">
+                        <div class="node-port -bottom-1.5 left-1/2 -translate-x-1/2 md:top-1/2 md:-left-1.5 md:-translate-y-1/2 md:right-auto md:translate-x-0"></div>
+                        <div class="net-wire wire-h w-4 -left-4 top-1/2 hidden md:block"><div class="data-packet packet-h-rev"></div></div>
+                        
+                        <div class="node-header">
+                            <span class="font-mono text-[9px] text-gray-400">NODE_04B // ARCHIVE_02.MP4</span>
+                            <i class="fa-solid fa-link text-[#ff3333]"></i>
+                        </div>
+                        <a href="https://youtu.be/WxUwhziL_DA?si=G78c0MgnDV19UgRa" target="_blank" class="block aspect-video relative overflow-hidden bg-black p-1">
+                            <div class="scanline-overlay"></div>
+                            <img src="https://img.youtube.com/vi/WxUwhziL_DA/maxresdefault.jpg" onerror="this.onerror=null;this.src='https://img.youtube.com/vi/WxUwhziL_DA/hqdefault.jpg';" alt="Popular Project" class="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-all border border-white/5">
+                            <div class="absolute inset-0 flex items-center justify-center z-20">
+                                <i class="fa-solid fa-circle-play text-[#ff3333] text-3xl bg-black/50 rounded-full group-hover:shadow-[0_0_15px_#ff3333]"></i>
+                            </div>
+                        </a>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- 06: THE ECOSYSTEM -->
+        <section id="ecosystem-section" class="py-32 px-6 relative z-10 border-b border-white/5">
+            <canvas class="velvet-bg absolute inset-0 w-full h-full z-0 opacity-40"></canvas>
+
+            <div class="max-w-7xl mx-auto relative text-center z-10">
+                <div class="master-spine z-[-1] hidden md:block" style="height: 100px;"></div>
+                
+                <!-- Central Broadcasting Hub -->
+                <div class="w-20 h-20 mx-auto rounded-full border-2 border-[#ff3333] bg-black shadow-[0_0_30px_rgba(255,51,51,0.3)] flex items-center justify-center mb-16 relative group z-10">
+                    <div class="absolute inset-0 rounded-full border border-[#ff3333] animate-ping opacity-50"></div>
+                    <i class="fa-solid fa-satellite-dish text-2xl text-[#ff3333]"></i>
+                    <div class="absolute -bottom-8 font-mono text-[10px] text-white tracking-widest whitespace-nowrap bg-black/80 px-2 py-1 border border-white/10">BROADCAST_HUB</div>
+                </div>
+
+                <!-- 5-Node Social Network -->
+                <div class="flex flex-wrap justify-center gap-6 reveal relative z-10">
+                    
+                    <!-- Spotify Node -->
+                    <a href="https://open.spotify.com/artist/5zIEwYDOqVYviypDTNE0yH?si=huisSFJETvu_5-_ex14fQg" target="_blank" style="--h-color: #1DB954;" class="node-card group interactive-elem w-full sm:w-[calc(50%-1.5rem)] lg:w-[220px]">
+                        <div class="node-port port-top"></div>
+                        <div class="node-header bg-[#1DB954]/10 border-b border-[#1DB954]/20">
+                            <span class="font-mono text-[9px] text-[#1DB954]">NODE_05A // SPOTIFY</span>
+                        </div>
+                        <div class="p-6 flex flex-col items-center bg-black/80">
+                            <i class="fa-brands fa-spotify text-4xl text-gray-500 group-hover:text-[#1DB954] mb-3 transition-colors"></i>
+                            <span class="text-[9px] font-mono text-gray-400">// AUDIO_ARCHIVE</span>
+                        </div>
+                    </a>
+
+                    <!-- Snapchat Node -->
+                    <a href="https://www.snapchat.com/@sgb1lly?sender_web_id=b4cf1d39-07c2-4376-bb4b-9a4f221736d6&device_type=ios&is_copy_url=true" target="_blank" style="--h-color: #FFFC00;" class="node-card group interactive-elem w-full sm:w-[calc(50%-1.5rem)] lg:w-[220px]">
+                        <div class="node-port port-top"></div>
+                        <div class="node-header bg-[#FFFC00]/10 border-b border-[#FFFC00]/20">
+                            <span class="font-mono text-[9px] text-[#FFFC00]">NODE_05B // SNAPCHAT</span>
+                        </div>
+                        <div class="p-6 flex flex-col items-center bg-black/80">
+                            <i class="fa-brands fa-snapchat text-4xl text-gray-500 group-hover:text-[#FFFC00] mb-3 transition-colors"></i>
+                            <span class="text-[9px] font-mono text-gray-400">// DAILY_FEED</span>
+                        </div>
+                    </a>
+
+                    <!-- TikTok Node -->
+                    <a href="https://www.tiktok.com/@sgbilly?_r=1&_t=ZT-955KIlZEpzR" target="_blank" style="--h-color: #ffffff;" class="node-card group interactive-elem w-full sm:w-[calc(50%-1.5rem)] lg:w-[220px]">
+                        <div class="node-port port-top"></div>
+                        <div class="node-header bg-white/10 border-b border-white/20">
+                            <span class="font-mono text-[9px] text-white">NODE_05C // TIKTOK</span>
+                        </div>
+                        <div class="p-6 flex flex-col items-center bg-black/80">
+                            <i class="fa-brands fa-tiktok text-4xl text-gray-500 group-hover:text-white mb-3 transition-colors"></i>
+                            <span class="text-[9px] font-mono text-gray-400">// VIRAL_NET</span>
+                        </div>
+                    </a>
+
+                    <!-- Instagram Node -->
+                    <a href="https://www.instagram.com/sgbilly_/" target="_blank" style="--h-color: #E1306C;" class="node-card group interactive-elem w-full sm:w-[calc(50%-1.5rem)] lg:w-[220px]">
+                        <div class="node-port port-top"></div>
+                        <div class="node-header bg-[#E1306C]/10 border-b border-[#E1306C]/20">
+                            <span class="font-mono text-[9px] text-[#E1306C]">NODE_05D // INSTAGRAM</span>
+                        </div>
+                        <div class="p-6 flex flex-col items-center bg-black/80">
+                            <i class="fa-brands fa-instagram text-4xl text-gray-500 group-hover:text-[#E1306C] mb-3 transition-colors"></i>
+                            <span class="text-[9px] font-mono text-gray-400">// VISUAL_DIARY</span>
+                        </div>
+                    </a>
+
+                    <!-- YouTube Node -->
+                    <a href="https://m.youtube.com/@sgbilly_" target="_blank" style="--h-color: #FF0000;" class="node-card group interactive-elem w-full sm:w-[calc(50%-1.5rem)] lg:w-[220px]">
+                        <div class="node-port port-top"></div>
+                        <div class="node-header bg-[#FF0000]/10 border-b border-[#FF0000]/20">
+                            <span class="font-mono text-[9px] text-[#FF0000]">NODE_05E // YOUTUBE</span>
+                        </div>
+                        <div class="p-6 flex flex-col items-center bg-black/80">
+                            <i class="fa-brands fa-youtube text-4xl text-gray-500 group-hover:text-[#FF0000] mb-3 transition-colors"></i>
+                            <span class="text-[9px] font-mono text-gray-400">// BROADCASTING</span>
+                        </div>
+                    </a>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- 07: FOOTER -->
+        <section class="py-12 px-6">
+            <footer class="text-center flex flex-col items-center">
+                <div class="node-port port-top relative mb-8"></div>
+                <div class="node-card inline-block p-4 group interactive-elem cursor-none">
+                    <p class="text-[10px] font-mono tracking-[0.2em] text-gray-500">
+                        END_OF_WORKFLOW // © <span id="year"></span> SG BILLY
+                    </p>
+                    <p class="text-[9px] font-mono tracking-widest text-[#ff3333] mt-2 group-hover:text-white transition-colors border-t border-white/5 pt-2">
+                        [ COLLABORATION WITH AICANFEEL ]
+                    </p>
+                </div>
+            </footer>
+        </section>
+    </div>
+
+    <!-- 08: AI LAB PAGE (NEW FULLSCREEN OVERLAY) -->
+    <div id="ai-lab-page" class="fixed inset-0 bg-[#030303] z-[9999] flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-700">
+        <canvas id="nexus-canvas" class="absolute inset-0 z-0 opacity-40"></canvas>
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#030303_100%)] z-10 pointer-events-none"></div>
+        
+        <button id="close-ai-lab" class="absolute top-8 right-8 text-white z-50 text-[10px] font-mono tracking-[0.2em] hover:text-[#ff3333] transition-colors interactive-elem bg-black border border-white/20 px-4 py-2">
+            [ TERMINATE CONNECTION ]
+        </button>
+
+        <div class="node-card w-full max-w-3xl flex flex-col h-[80vh] z-20">
+            <div class="node-header bg-[#ff3333]/10 border-b border-[#ff3333]/30">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-terminal text-[#ff3333]"></i>
+                    <span class="font-mono text-[10px] text-white">SYS_NODE // NEXUS_A.I.</span>
+                </div>
+                <div class="flex gap-1"><div class="w-2 h-2 bg-[#ff3333] rounded-full animate-pulse"></div></div>
+            </div>
+            
+            <div class="flex-1 p-6 flex flex-col bg-black/90">
+                <div class="text-center mb-6 border-b border-white/10 pb-4">
+                    <h2 class="font-display text-3xl text-white tracking-[0.3em] shadow-[#ff3333]">NEXUS <span class="text-[#ff3333]">A.I.</span></h2>
+                    <p class="font-mono text-[9px] text-gray-500 tracking-widest uppercase mt-2">Generative Audio-Visual Node</p>
+                </div>
+
+                <div id="ai-terminal" class="flex-1 font-mono text-xs text-gray-400 overflow-y-auto mb-6 flex flex-col gap-3 pr-2">
+                    <div class="text-[#ff3333]">> NEXUS CORE ONLINE. WAITING FOR INPUT PARAMETERS.</div>
+                </div>
+
+                <div class="relative w-full border border-white/20 bg-black flex items-center">
+                    <span class="font-mono text-[#ff3333] pl-4">></span>
+                    <input type="text" id="ai-input" class="w-full bg-transparent p-4 text-white font-mono text-xs focus:outline-none interactive-elem" placeholder="Enter parameters for synthesis..." autocomplete="off">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- INTERNAL SCRIPTS -->
+    <script>
+        document.getElementById('year').textContent = new Date().getFullYear();
+        let lastScrollY = window.scrollY;
+        
+        /* === UI TRACKING === */
+        const trackX = document.getElementById('track-x');
+        const trackY = document.getElementById('track-y');
+
+        /* === SOUND ENGINE (Soft, Ethereal Bells) === */
+        let audioCtx; let droneOscillator; let droneGain;
+        let isAudioMuted = false;
+
+        function initAudio() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            droneOscillator = audioCtx.createOscillator();
+            droneOscillator.type = 'sine'; // Soft sine wave base
+            droneGain = audioCtx.createGain();
+            droneGain.gain.value = 0; 
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass'; filter.frequency.value = 200; 
+            droneOscillator.connect(filter); filter.connect(droneGain); droneGain.connect(audioCtx.destination);
+            droneOscillator.start();
+            droneGain.gain.setTargetAtTime(0.04, audioCtx.currentTime, 4.0); // Gentle ambient base volume
+            window.audioFilter = filter;
+        }
+
+        /* === AUDIO TOGGLE LOGIC === */
+        const audioToggleBtn = document.getElementById('audio-toggle');
+        const eqContainer = document.getElementById('eq-container');
+        const audioStatusText = document.getElementById('audio-status-text');
+
+        audioToggleBtn.addEventListener('click', () => {
+            if(!audioCtx) return;
+            isAudioMuted = !isAudioMuted;
+            
+            if(isAudioMuted) {
+                droneGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.5);
+                eqContainer.classList.add('eq-paused');
+                audioStatusText.textContent = 'Network: Off';
+                audioStatusText.style.color = '#86868b';
+            } else {
+                droneGain.gain.setTargetAtTime(0.04, audioCtx.currentTime, 0.5);
+                eqContainer.classList.remove('eq-paused');
+                audioStatusText.textContent = 'Network: On';
+                audioStatusText.style.color = '#d1d5db';
+            }
+            playHoverSound();
+        });
+
+        function playHoverSound() {
+            if (!audioCtx || isAudioMuted) return;
+            // Pentatonic scale notes for soft, musical bell-like chimes
+            const notes = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; 
+            const freq = notes[Math.floor(Math.random() * notes.length)];
+            
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain();
+            osc.type = 'sine'; // Soft tone
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            
+            // Soft envelope (gentle attack, ethereal long release)
+            gain.gain.setValueAtTime(0, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.05, audioCtx.currentTime + 0.05); 
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2); 
+            
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 1.5);
+        }
+
+        /* === 3D HERO TITLE LOGIC === */
+        const heroTitleWrap = document.querySelector('.hero-title-wrap');
+        const heroTitle3D = document.querySelector('.hero-title-cyber');
+        
+        if (heroTitleWrap && heroTitle3D) {
+            heroTitleWrap.addEventListener('mousemove', (e) => {
+                const rect = heroTitleWrap.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                heroTitle3D.style.setProperty('--x', `${x}px`);
+                heroTitle3D.style.setProperty('--y', `${y}px`);
+
+                const tiltX = e.clientX - rect.left - rect.width / 2;
+                const tiltY = e.clientY - rect.top - rect.height / 2;
+                heroTitle3D.style.transform = `rotateX(${-tiltY * 0.03}deg) rotateY(${tiltX * 0.03}deg)`;
+            });
+            heroTitleWrap.addEventListener('mouseleave', () => {
+                heroTitle3D.style.transform = `rotateX(0deg) rotateY(0deg)`;
+            });
+        }
+
+        /* === INTERACTIVE DECODING TEXT === */
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+        document.querySelectorAll('.decode-text').forEach(el => {
+            el.addEventListener('mouseenter', event => {
+                let iterations = 0;
+                const target = event.target;
+                const originalText = target.dataset.value;
+                if (!originalText) return;
+                
+                playHoverSound();
+                clearInterval(target.decodeInterval);
+                
+                target.decodeInterval = setInterval(() => {
+                    target.innerText = originalText.split("")
+                        .map((letter, index) => {
+                            if(index < iterations || letter === " ") return originalText[index];
+                            return letters[Math.floor(Math.random() * letters.length)]
+                        }).join("");
+                    
+                    if(iterations >= originalText.length){ clearInterval(target.decodeInterval); }
+                    iterations += 1 / 3;
+                }, 30);
+            });
+        });
+
+        /* === AI TYPEWRITER === */
+        const aiText = "> Establishing secure node connection...\n> Handshake verified.\n> Synchronizing auditory datasets...\n> Node Status: Optimal.\n> SG Billy Workflow initialized.";
+        let i = 0;
+        function typeWriter() {
+            if (i < aiText.length) {
+                const el = document.getElementById("ai-typewriter");
+                if(el) {
+                    el.innerHTML += aiText.charAt(i) === '\n' ? '<br>' : aiText.charAt(i);
+                    i++; setTimeout(typeWriter, Math.random() * 40 + 20);
+                }
+            }
+        }
+
+        /* === ENTRY SEQUENCE === */
+        const entryScreen = document.getElementById('entry-screen');
+        const mainContent = document.getElementById('main-content');
+        const enterBtn = document.getElementById('enter-btn');
+
+        enterBtn.addEventListener('click', () => {
+            initAudio(); playHoverSound();
+            entryScreen.style.opacity = '0';
+            setTimeout(() => {
+                entryScreen.style.display = 'none';
+                mainContent.style.display = 'block';
+                window.dispatchEvent(new Event('resize'));
+                initCanvas(); 
+                initHeroNetwork(); 
+                initVelvet(); 
+                initNeurons(); 
+            }, 1500);
+        });
+
+        /* === CURSOR TRACKING === */
+        const cursorCross = document.querySelector('.cursor-cross');
+        const cursorOutline = document.querySelector('.cursor-outline');
+        let mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
+        let outlineX = mouseX, outlineY = mouseY;
+        let isMouseMoving = false;
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isMouseMoving) {
+                window.requestAnimationFrame(() => {
+                    mouseX = e.clientX; mouseY = e.clientY;
+                    cursorCross.style.left = `${mouseX}px`; cursorCross.style.top = `${mouseY}px`;
+                    
+                    // Update UI tracker
+                    if(trackX && trackY) {
+                        trackX.textContent = String(mouseX).padStart(4, '0');
+                        trackY.textContent = String(mouseY).padStart(4, '0');
+                    }
+                    isMouseMoving = false;
+                });
+                isMouseMoving = true;
+            }
+        });
+
+        function animateCursor() {
+            outlineX += (mouseX - outlineX) * 0.15;
+            outlineY += (mouseY - outlineY) * 0.15;
+            cursorOutline.style.left = `${outlineX}px`; cursorOutline.style.top = `${outlineY}px`;
+            requestAnimationFrame(animateCursor);
+        }
+        animateCursor();
+
+        document.querySelectorAll('a, button, .interactive-elem').forEach(el => {
+            el.addEventListener('mouseenter', () => {
+                document.body.classList.add('cursor-hover');
+                if(el !== enterBtn && el.id !== 'audio-toggle') playHoverSound();
+            });
+            el.addEventListener('mouseleave', () => document.body.classList.remove('cursor-hover'));
+        });
+
+        /* === SCROLL & OBSERVERS === */
+        const scrollPctEl = document.getElementById('scroll-pct');
+        const scrollBarFill = document.getElementById('scroll-bar-fill');
+        let isScrolling = false;
+
+        window.addEventListener('scroll', () => {
+            if (!isScrolling) {
+                window.requestAnimationFrame(() => {
+                    const scrollY = window.scrollY;
+                    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+                    
+                    let scrollPercent = maxScroll > 0 ? (scrollY / maxScroll) * 100 : 0;
+                    
+                    // Fixed crash by adding null checks here
+                    if (scrollPctEl) scrollPctEl.textContent = `${Math.round(scrollPercent)}%`;
+                    if (scrollBarFill) scrollBarFill.style.height = `${scrollPercent}%`;
+
+                    if (audioCtx && window.audioFilter && !isAudioMuted) {
+                        let speed = Math.abs(scrollY - lastScrollY);
+                        let targetFreq = 200 + Math.min(speed * 10, 800); 
+                        window.audioFilter.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.1);
+                        clearTimeout(window.scrollAudioTimer);
+                        window.scrollAudioTimer = setTimeout(() => {
+                            window.audioFilter.frequency.setTargetAtTime(200, audioCtx.currentTime, 0.5);
+                        }, 50);
+                    }
+                    lastScrollY = scrollY;
+                    isScrolling = false;
+                });
+                isScrolling = true;
+            }
+        });
+
+        const revealElements = document.querySelectorAll('.reveal');
+        const graphFills = document.querySelectorAll('.stat-bar-fill');
+        let aiTyped = false;
+
+        const mainObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    if (entry.target.querySelector('#ai-typewriter') && !aiTyped) {
+                        aiTyped = true; setTimeout(typeWriter, 500);
+                    }
+                    if (entry.target.id === 'stats-container') {
+                        graphFills.forEach(bar => bar.style.width = bar.getAttribute('data-width'));
+                    }
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.15, rootMargin: "0px 0px -50px 0px" });
+        revealElements.forEach(el => mainObserver.observe(el));
+
+        /* === AI LAB LOGIC & INTERFACE === */
+        const aiLabPage = document.getElementById('ai-lab-page');
+        const openAiBtn = document.getElementById('open-ai-lab');
+        const closeAiBtn = document.getElementById('close-ai-lab');
+        const aiInput = document.getElementById('ai-input');
+        const aiTerminal = document.getElementById('ai-terminal');
+
+        if (openAiBtn && closeAiBtn) {
+            openAiBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                aiLabPage.classList.remove('pointer-events-none');
+                aiLabPage.style.opacity = '1';
+                initNexusCanvas();
+                playHoverSound();
+            });
+
+            closeAiBtn.addEventListener('click', () => {
+                aiLabPage.style.opacity = '0';
+                setTimeout(() => aiLabPage.classList.add('pointer-events-none'), 700);
+                playHoverSound();
+            });
+        }
+
+        const aiResponses = [
+            "Analyzing harmonic resonance...",
+            "Synthesizing auditory matrix based on input.",
+            "Sub-frequencies matched. Extrapolating beat patterns.",
+            "Visualizing acoustic data streams...",
+            "Input accepted. Re-calibrating neural network.",
+            "Sonic geometry adjusted. Output imminent.",
+            "Deconstructing bassline architecture...",
+            "Initiating hyper-threaded waveform analysis."
+        ];
+
+        if(aiInput) {
+            aiInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && aiInput.value.trim() !== '') {
+                    const userText = aiInput.value.trim();
+                    aiInput.value = '';
+                    
+                    aiTerminal.innerHTML += `<div class="text-white">> USER_INPUT: ${userText}</div>`;
+                    aiTerminal.scrollTop = aiTerminal.scrollHeight;
+                    
+                    triggerNexusBurst();
+                    playHoverSound();
+                    setTimeout(playHoverSound, 150);
+                    setTimeout(playHoverSound, 300);
+
+                    setTimeout(() => {
+                        const response = aiResponses[Math.floor(Math.random() * aiResponses.length)];
+                        aiTerminal.innerHTML += `<div class="text-[#ff3333]">> SYS_PROCESS: ${response}</div>`;
+                        aiTerminal.scrollTop = aiTerminal.scrollHeight;
+                        triggerNexusBurst(true); 
+                    }, 800 + Math.random() * 1000);
+                }
+            });
+        }
+
+        /* === BACKGROUND CANVASES (Logic remains consistent) === */
+        const heroCanvas = document.getElementById('hero-network-canvas');
+        const heroCtx = heroCanvas ? heroCanvas.getContext('2d') : null;
+        let heroParticles = [];
+        let shockwaves = []; 
+
+        function initHeroNetwork() {
+            if(!heroCanvas) return;
+            const resize = () => { heroCanvas.width = heroCanvas.parentElement.offsetWidth; heroCanvas.height = heroCanvas.parentElement.offsetHeight; };
+            resize(); window.addEventListener('resize', resize);
+            for(let i=0; i<150; i++) {
+                heroParticles.push({ x: Math.random() * heroCanvas.width, y: Math.random() * heroCanvas.height, vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5, size: Math.random() * 2 + 1 });
+            }
+            window.addEventListener('click', (e) => {
+                if (window.scrollY < window.innerHeight && heroCanvas) {
+                    const rect = heroCanvas.getBoundingClientRect();
+                    shockwaves.push({ x: e.clientX - rect.left, y: e.clientY - rect.top, radius: 0, alpha: 1 });
+                }
+            });
+            animateHeroNetwork();
+        }
+
+        function animateHeroNetwork() {
+            if(!heroCtx) return;
+            if (window.scrollY > window.innerHeight + 100) { requestAnimationFrame(animateHeroNetwork); return; }
+            heroCtx.clearRect(0, 0, heroCanvas.width, heroCanvas.height);
+            heroCtx.globalCompositeOperation = 'screen';
+            
+            window.scrollVelocityY = window.scrollVelocityY || 0; window.scrollVelocityY *= 0.85; 
+
+            for (let i = shockwaves.length - 1; i >= 0; i--) {
+                let sw = shockwaves[i];
+                heroCtx.beginPath(); heroCtx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+                heroCtx.strokeStyle = `rgba(255, 51, 51, ${sw.alpha * 0.8})`; heroCtx.lineWidth = 3; heroCtx.stroke();
+                heroCtx.beginPath(); heroCtx.arc(sw.x, sw.y, sw.radius + 15, 0, Math.PI * 2);
+                heroCtx.strokeStyle = `rgba(255, 255, 255, ${sw.alpha * 0.2})`; heroCtx.lineWidth = 1; heroCtx.stroke();
+                sw.radius += 12; sw.alpha -= 0.02;
+                if (sw.alpha <= 0) shockwaves.splice(i, 1);
+            }
+
+            heroParticles.forEach((p, index) => {
+                p.x += p.vx; p.y += p.vy - (window.scrollVelocityY * 0.05); 
+                shockwaves.forEach(sw => {
+                    let dx = p.x - sw.x, dy = p.y - sw.y, dist = Math.sqrt(dx * dx + dy * dy);
+                    if (Math.abs(dist - sw.radius) < 25) { p.vx += (dx / dist) * 4 * sw.alpha; p.vy += (dy / dist) * 4 * sw.alpha; }
+                });
+                if(p.x < 0) p.x = heroCanvas.width; if(p.x > heroCanvas.width) p.x = 0;
+                if(p.y < 0) p.y = heroCanvas.height; if(p.y > heroCanvas.height) p.y = 0;
+
+                const rect = heroCanvas.getBoundingClientRect(), cMouseX = mouseX - rect.left, cMouseY = mouseY - rect.top;
+                const dx = cMouseX - p.x, dy = cMouseY - p.y, dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if(dist < 150 && window.scrollY < window.innerHeight) {
+                    heroCtx.beginPath(); heroCtx.strokeStyle = `rgba(255, 51, 51, ${0.4 * (1 - dist/150)})`; heroCtx.lineWidth = 1.2;
+                    heroCtx.moveTo(p.x, p.y); heroCtx.lineTo(cMouseX, cMouseY); heroCtx.stroke();
+                    const force = (150 - dist) / 150; p.vx -= (dx / dist) * force * 0.03; p.vy -= (dy / dist) * force * 0.03;
+                }
+
+                const currentSpeed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+                if (currentSpeed > 0.8) { p.vx = (p.vx / currentSpeed) * 0.8; p.vy = (p.vy / currentSpeed) * 0.8; } 
+                else if (currentSpeed < 0.1 && dist >= 150) { p.vx += (Math.random() - 0.5) * 0.01; p.vy += (Math.random() - 0.5) * 0.01; }
+
+                for(let j=index+1; j<heroParticles.length; j++) {
+                    const p2 = heroParticles[j], dist2 = Math.sqrt(Math.pow(p.x - p2.x, 2) + Math.pow(p.y - p2.y, 2));
+                    if(dist2 < 90) { 
+                        heroCtx.beginPath(); heroCtx.strokeStyle = `rgba(255, 255, 255, ${0.3 * (1 - dist2/90)})`; heroCtx.lineWidth = 0.8;
+                        heroCtx.moveTo(p.x, p.y); heroCtx.lineTo(p2.x, p2.y); heroCtx.stroke();
+                    }
+                }
+                
+                heroCtx.beginPath();
+                if (Math.abs(window.scrollVelocityY) > 2) { heroCtx.ellipse(p.x, p.y, p.size * 0.5, p.size + Math.abs(window.scrollVelocityY) * 0.05, 0, 0, Math.PI * 2); } 
+                else { heroCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2); }
+                heroCtx.fillStyle = `rgba(255, 255, 255, 0.7)`; heroCtx.fill();
+            });
+            heroCtx.globalCompositeOperation = 'source-over';
+            requestAnimationFrame(animateHeroNetwork);
+        }
+
+        const canvas = document.getElementById('ai-canvas');
+        const ctx = canvas ? canvas.getContext('2d') : null;
+        let particles = [];
+        function initCanvas() {
+            if(!canvas) return;
+            const resize = () => { canvas.width = canvas.parentElement.offsetWidth; canvas.height = canvas.parentElement.offsetHeight; };
+            resize(); window.addEventListener('resize', resize);
+            for(let i=0; i<80; i++) { particles.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5, size: Math.random() * 2 + 1 }); }
+            animateCanvas();
+        }
+        function animateCanvas() {
+            if(!ctx) return;
+            const sectionRect = canvas.parentElement.getBoundingClientRect();
+            if (sectionRect.top > window.innerHeight || sectionRect.bottom < 0) { requestAnimationFrame(animateCanvas); return; }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach((p, index) => {
+                p.x += p.vx; p.y += p.vy;
+                if(p.x < 0 || p.x > canvas.width) p.vx *= -1; if(p.y < 0 || p.y > canvas.height) p.vy *= -1;
+                const cMouseX = mouseX - sectionRect.left, cMouseY = mouseY - sectionRect.top;
+                const dist = Math.sqrt(Math.pow(cMouseX - p.x, 2) + Math.pow(cMouseY - p.y, 2));
+                if(dist < 150 && window.scrollY > window.innerHeight * 0.5) {
+                    ctx.beginPath(); ctx.strokeStyle = `rgba(255, 51, 51, ${1 - dist/150})`; ctx.lineWidth = 0.5; ctx.moveTo(p.x, p.y); ctx.lineTo(cMouseX, cMouseY); ctx.stroke();
+                    p.vx += (cMouseX - p.x) * 0.0001; p.vy += (cMouseY - p.y) * 0.0001;
+                }
+                for(let j=index+1; j<particles.length; j++) {
+                    const p2 = particles[j], dist2 = Math.sqrt(Math.pow(p.x - p2.x, 2) + Math.pow(p.y - p2.y, 2));
+                    if(dist2 < 100) { ctx.beginPath(); ctx.strokeStyle = `rgba(255, 255, 255, ${0.1 * (1 - dist2/100)})`; ctx.lineWidth = 0.5; ctx.moveTo(p.x, p.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); }
+                }
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; ctx.fill();
+            });
+            requestAnimationFrame(animateCanvas);
+        }
+
+        const velvetCanvases = document.querySelectorAll('.velvet-bg'); let vTime = 0;
+        function initVelvet() {
+            if(velvetCanvases.length === 0) return;
+            const resize = () => { velvetCanvases.forEach(canvas => { canvas.width = canvas.parentElement.offsetWidth; canvas.height = canvas.parentElement.offsetHeight; }); };
+            resize(); window.addEventListener('resize', resize); animateVelvet();
+        }
+        function animateVelvet() {
+            vTime += 0.008; 
+            velvetCanvases.forEach(canvas => {
+                const sectionRect = canvas.parentElement.getBoundingClientRect();
+                if (sectionRect.top > window.innerHeight || sectionRect.bottom < 0) return;
+                const vCtx = canvas.getContext('2d'), width = canvas.width, height = canvas.height;
+                vCtx.fillStyle = '#010101'; vCtx.fillRect(0, 0, width, height);
+                const numFolds = 6, foldWidth = width / (numFolds - 2);
+                for (let i = -2; i < numFolds + 1; i++) {
+                    const baseX = i * foldWidth, nextBaseX = (i + 1) * foldWidth;
+                    vCtx.beginPath();
+                    let x0_top = baseX + Math.sin(vTime + i * 0.6) * 100, x0_mid1 = baseX + Math.sin(vTime * 0.8 + i * 0.5 + 1) * 120, x0_mid2 = baseX + Math.sin(vTime * 1.1 + i * 0.4 + 2) * 140, x0_bot = baseX + Math.sin(vTime * 0.9 + i * 0.6 + 3) * 100;
+                    let x1_top = nextBaseX + Math.sin(vTime + (i+1) * 0.6) * 100, x1_mid1 = nextBaseX + Math.sin(vTime * 0.8 + (i+1) * 0.5 + 1) * 120, x1_mid2 = nextBaseX + Math.sin(vTime * 1.1 + (i+1) * 0.4 + 2) * 140, x1_bot = nextBaseX + Math.sin(vTime * 0.9 + (i+1) * 0.6 + 3) * 100;
+                    vCtx.moveTo(x0_top, 0); vCtx.bezierCurveTo(x0_mid1, height/3, x0_mid2, 2*height/3, x0_bot, height);
+                    vCtx.lineTo(x1_bot, height); vCtx.bezierCurveTo(x1_mid2, 2*height/3, x1_mid1, height/3, x1_top, 0); vCtx.closePath();
+                    const gradient = vCtx.createLinearGradient(x0_top, 0, x1_top, 0);
+                    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)'); gradient.addColorStop(0.3, 'rgba(10, 5, 5, 1)'); gradient.addColorStop(0.5, 'rgba(35, 8, 8, 1)'); gradient.addColorStop(0.7, 'rgba(10, 5, 5, 1)'); gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+                    vCtx.fillStyle = gradient; vCtx.fill();
+                }
+            });
+            requestAnimationFrame(animateVelvet);
+        }
+
+        const neuronCanvas = document.getElementById('neuron-canvas');
+        const nCtx = neuronCanvas ? neuronCanvas.getContext('2d') : null;
+        let neurons = [];
+        function initNeurons() {
+            if(!neuronCanvas) return;
+            const resize = () => { neuronCanvas.width = neuronCanvas.parentElement.offsetWidth; neuronCanvas.height = neuronCanvas.parentElement.offsetHeight; };
+            resize(); window.addEventListener('resize', resize);
+            for(let i=0; i<35; i++) { neurons.push({ x: Math.random() * neuronCanvas.width, y: Math.random() * neuronCanvas.height, vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4, radius: Math.random() * 1.5 + 0.5, pulse: Math.random() * Math.PI * 2, pulseSpeed: Math.random() * 0.05 + 0.02 }); }
+            animateNeurons();
+        }
+        function animateNeurons() {
+            if(!nCtx) return;
+            const sectionRect = neuronCanvas.parentElement.getBoundingClientRect();
+            if (sectionRect.top > window.innerHeight || sectionRect.bottom < 0) { requestAnimationFrame(animateNeurons); return; }
+            nCtx.clearRect(0, 0, neuronCanvas.width, neuronCanvas.height);
+            nCtx.fillStyle = '#030303'; nCtx.fillRect(0, 0, neuronCanvas.width, neuronCanvas.height);
+            nCtx.globalCompositeOperation = 'screen';
+
+            neurons.forEach((n, index) => {
+                n.x += n.vx; n.y += n.vy; n.pulse += n.pulseSpeed;
+                if(n.x < 0) n.x = neuronCanvas.width; if(n.x > neuronCanvas.width) n.x = 0;
+                if(n.y < 0) n.y = neuronCanvas.height; if(n.y > neuronCanvas.height) n.y = 0;
+
+                const cMouseX = mouseX - sectionRect.left, cMouseY = mouseY - sectionRect.top, dist = Math.sqrt(Math.pow(cMouseX - n.x, 2) + Math.pow(cMouseY - n.y, 2));
+                if (dist < 100 && window.scrollY >= sectionRect.top) { n.x -= ((cMouseX - n.x) / dist) * 0.5; n.y -= ((cMouseY - n.y) / dist) * 0.5; }
+
+                for(let j=index+1; j<neurons.length; j++) {
+                    const n2 = neurons[j], dist2 = Math.sqrt(Math.pow(n.x - n2.x, 2) + Math.pow(n.y - n2.y, 2));
+                    if(dist2 < 80) {
+                        nCtx.beginPath();
+                        nCtx.strokeStyle = `rgba(255, 51, 51, ${(1 - dist2 / 80) * 0.6})`; nCtx.lineWidth = 0.8;
+                        nCtx.moveTo(n.x, n.y);
+                        const cpX = (n.x + n2.x) / 2 + (Math.sin(n.pulse) * 15), cpY = (n.y + n2.y) / 2 + (Math.cos(n2.pulse) * 15);
+                        nCtx.quadraticCurveTo(cpX, cpY, n2.x, n2.y); nCtx.stroke();
+                    }
+                }
+                nCtx.beginPath(); nCtx.arc(n.x, n.y, Math.max(0.5, n.radius + Math.sin(n.pulse) * 1.5), 0, Math.PI * 2);
+                nCtx.shadowBlur = 8; nCtx.shadowColor = '#ff3333'; nCtx.fillStyle = '#ffffff'; nCtx.fill(); nCtx.shadowBlur = 0;
+            });
+            nCtx.globalCompositeOperation = 'source-over';
+            requestAnimationFrame(animateNeurons);
+        }
+
+        const nexusCanvas = document.getElementById('nexus-canvas');
+        const nexusCtx = nexusCanvas ? nexusCanvas.getContext('2d') : null;
+        let nexusParticles = [], nexusBurstActive = false, nexusBurstIntensity = 0;
+        function initNexusCanvas() {
+            if(!nexusCanvas) return;
+            const resize = () => { nexusCanvas.width = window.innerWidth; nexusCanvas.height = window.innerHeight; };
+            resize(); window.addEventListener('resize', resize);
+            if(nexusParticles.length === 0) {
+                for(let i=0; i<120; i++) { nexusParticles.push({ x: Math.random() * nexusCanvas.width, y: Math.random() * nexusCanvas.height, vx: (Math.random() - 0.5), vy: (Math.random() - 0.5), baseSize: Math.random() * 1.5 + 0.5 }); }
+                animateNexus();
+            }
+        }
+        function triggerNexusBurst(massive = false) { nexusBurstActive = true; nexusBurstIntensity = massive ? 20 : 8; setTimeout(() => { nexusBurstActive = false; }, massive ? 800 : 500); }
+        function animateNexus() {
+            if(!nexusCtx || aiLabPage.style.opacity === '0') { requestAnimationFrame(animateNexus); return; }
+            nexusCtx.fillStyle = 'rgba(3, 3, 3, 0.15)'; nexusCtx.fillRect(0, 0, nexusCanvas.width, nexusCanvas.height);
+            const centerX = nexusCanvas.width / 2, centerY = nexusCanvas.height / 2;
+            if (nexusBurstIntensity > 0) nexusBurstIntensity -= 0.3;
+
+            nexusParticles.forEach(p => {
+                const dx = centerX - p.x, dy = centerY - p.y, dist = Math.sqrt(dx*dx + dy*dy);
+                if (nexusBurstActive) { p.vx -= (dx / dist) * (Math.random() * 3); p.vy -= (dy / dist) * (Math.random() * 3); } 
+                else { p.vx += (dx / dist) * 0.02; p.vy += (dy / dist) * 0.02; }
+                p.x += p.vx; p.y += p.vy; p.vx *= 0.95; p.vy *= 0.95;
+                if(p.x < 0) p.x = nexusCanvas.width; if(p.x > nexusCanvas.width) p.x = 0;
+                if(p.y < 0) p.y = nexusCanvas.height; if(p.y > nexusCanvas.height) p.y = 0;
+
+                nexusCtx.beginPath(); nexusCtx.arc(p.x, p.y, p.baseSize + (nexusBurstIntensity / 5), 0, Math.PI * 2);
+                nexusCtx.fillStyle = nexusBurstActive ? '#ffffff' : '#ff3333'; nexusCtx.fill();
+                
+                if (nexusBurstActive && dist < 300) {
+                    nexusCtx.beginPath(); nexusCtx.moveTo(p.x, p.y); nexusCtx.lineTo(centerX, centerY);
+                    nexusCtx.strokeStyle = `rgba(255, 51, 51, ${0.1 * (nexusBurstIntensity/20)})`; nexusCtx.stroke();
+                }
+            });
+            requestAnimationFrame(animateNexus);
+        }
+    </script>
+</body>
+</html>
